@@ -1,0 +1,32 @@
+// RSS Ayarları
+const rssKaynaklari = [
+  { url: "https://site1.com/feed", etiket: "Teknoloji" },
+  { url: "https://site2.com/feed", etiket: "Haberler" }
+];
+
+const BLOG_ID = "BLOG_ID_NUMARANIZ"; // Blogger ayarlarından alabilirsiniz
+
+function rssBotCalistir() {
+  rssKaynaklari.forEach(kaynak => {
+    let xml = UrlFetchApp.fetch(kaynak.url).getContentText();
+    let document = XmlService.parse(xml);
+    let items = document.getRootElement().getChild("channel").getChildren("item");
+    
+    // En son haberi al
+    let sonHaber = items[0];
+    let baslik = sonHaber.getChildText("title");
+    let icerik = sonHaber.getChildText("description");
+    let link = sonHaber.getChildText("link");
+    
+    blogaGonder(baslik, icerik + "<br><br>Kaynak: " + link, kaynak.etiket);
+  });
+}
+
+function blogaGonder(baslik, icerik, etiket) {
+  let post = {
+    "title": baslik,
+    "content": icerik,
+    "labels": [etiket]
+  };
+  Blogger.Posts.insert(post, BLOG_ID);
+}
