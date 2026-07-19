@@ -1,24 +1,28 @@
 // RSS Ayarları
 const rssKaynaklari = [
-  { url: "https://site1.com/feed", etiket: "Teknoloji" },
+  { url: "https://gizlivadinet-creator.github.io/makale/makaleler.xml", etiket: "Tarihte Bugün" },
   { url: "https://site2.com/feed", etiket: "Haberler" }
 ];
 
-const BLOG_ID = "BLOG_ID_NUMARANIZ"; // Blogger ayarlarından alabilirsiniz
+const BLOG_ID = "2141149813172676021"; 
 
 function rssBotCalistir() {
   rssKaynaklari.forEach(kaynak => {
-    let xml = UrlFetchApp.fetch(kaynak.url).getContentText();
-    let document = XmlService.parse(xml);
-    let items = document.getRootElement().getChild("channel").getChildren("item");
-    
-    // En son haberi al
-    let sonHaber = items[0];
-    let baslik = sonHaber.getChildText("title");
-    let icerik = sonHaber.getChildText("description");
-    let link = sonHaber.getChildText("link");
-    
-    blogaGonder(baslik, icerik + "<br><br>Kaynak: " + link, kaynak.etiket);
+    try {
+      let xml = UrlFetchApp.fetch(kaynak.url).getContentText();
+      let document = XmlService.parse(xml);
+      let items = document.getRootElement().getChild("channel").getChildren("item");
+      
+      // En son haberi al
+      let sonHaber = items[0];
+      let baslik = sonHaber.getChildText("title");
+      // İçerik kısmını sadece açıklama (description) olarak alıyoruz
+      let icerik = sonHaber.getChildText("description");
+      
+      blogaGonder(baslik, icerik, kaynak.etiket);
+    } catch (e) {
+      Logger.log("Hata oluştu: " + e.toString());
+    }
   });
 }
 
