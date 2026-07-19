@@ -1,0 +1,17 @@
+{
+  "name": "blogger-rss-bot",
+  "version": "1.0.0",
+  "description": "Supabase destekli, Blogger icin otomatik RSS paylasim botu (GitHub Actions ile calisir)",
+  "main": "index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.4",
+    "rss-parser": "^3.13.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
