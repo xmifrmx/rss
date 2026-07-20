@@ -1,0 +1,250 @@
+/**
+ * RSS -> Blogger otomasyonu
+ * Supabase (kota yok) + GitHub Actions (zamanlayıcı) ile çalışır.
+ *
+ * Ortam değişkenleri (GitHub Secrets üzerinden gelir):
+ *  SUPABASE_URL, SUPABASE_SERVICE_KEY
+ *  BLOG_ID
+ *  GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN
+ */
+
+import { createClient } from "@supabase/supabase-js";
+import Parser from "rss-parser";
+
+const {
+  SUPABASE_URL,
+  SUPABASE_SERVICE_KEY,
+  BLOG_ID,
+  GOOGLE_CLIENT_ID,
+  GOOGLE_CLIENT_SECRET,
+  GOOGLE_REFRESH_TOKEN,
+  MAX_POSTS_PER_FEED = "3", // her çalıştırmada, feed başına en fazla kaç yeni yazı atılsın
+} = process.env;
+
+function requireEnv() {
+  const required = {
+    SUPABASE_URL,
+    SUPABASE_SERVICE_KEY,
+    BLOG_ID,
+    GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET,
+    GOOGLE_REFRESH_TOKEN,
+  };
+  const missing = Object.entries(required)
+    .filter(([, v]) => !v)
+    .map(([k]) => k);
+  if (missing.length) {
+    throw new Error("Eksik ortam değişkeni(leri): " + missing.join(", "));
+  }
+}
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+const parser = new Parser({
+  customFields: {
+    item: [
+      ["content:encoded", "contentEncoded"],
+      ["media:content", "mediaContent"],
+      ["media:thumbnail", "mediaThumbnail"],
+    ],
+  },
+  timeout: 20000,
+  headers: { "User-Agent": "Mozilla/5.0 (compatible; HamdiOtoRSSBot/1.0)" },
+});
+
+// ---------- Kategori otomatik belirleme ----------
+// Feed'in kendi etiketi varsayılan olarak kullanılır; ama başlık/özet içinde
+// daha spesifik bir kategoriye işaret eden anahtar kelimeler varsa o kategori seçilir.
+const KATEGORI_ANAHTAR_KELIME = {
+  Otomobil: ["otomobil", "araç", "araba", "motor", "elektrikli araç", "suv", "sedan", "lastik", "sürüş"],
+  Ekonomi: ["dolar", "euro", "borsa", "enflasyon", "faiz", "ekonomi", "piyasa", "tl ", "kur ", "zam"],
+  Spor: ["futbol", "basketbol", "voleybol", "maç", "gol", "transfer", "lig", "şampiyon", "spor"],
+  Teknoloji: ["yapay zeka", "teknoloji", "yazılım", "uygulama", "telefon", "işlemci", "google", "apple", "microsoft"],
+  Haberler: ["haber", "gündem", "açıklama", "bakan", "meclis", "kriz"],
+  "Rüya Tabirleri": ["rüya", "rüyada", "tabir"],
+  "Tarihte Bugün": ["tarihte bugün", "yılında", "doğdu", "vefat etti"],
+};
+
+function kategoriBelirle(baslik, ozet, varsayilanEtiket) {
+  const metin = `${baslik || ""} ${ozet || ""}`.toLowerCase();
+  for (const [kategori, kelimeler] of Object.entries(KATEGORI_ANAHTAR_KELIME)) {
+    if (kelimeler.some((k) => metin.includes(k))) return kategori;
+  }
+  return varsayilanEtiket;
+}
+
+// ---------- Güvenli HTML temizleme ----------
+function guvenlikTemizle(html) {
+  if (!html) return "";
+  let t = html;
+  const zararli = ["script", "style", "iframe", "noscript", "object", "embed", "form"];
+  for (const ad of zararli) {
+    t = t.replace(new RegExp(`<${ad}[^>]*>[\\s\\S]*?<\\/${ad}\\s*>`, "gi"), "");
+    t = t.replace(new RegExp(`<${ad}[^>]*\\/?>`, "gi"), "");
+  }
+  t = t.replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "");
+  t = t.replace(/href\s*=\s*(["'])\s*javascript:[^"']*\1/gi, 'href="#"');
+  return t;
+}
+
+function bloggerFormatla(ham) {
+  if (!ham) return "<p>İçerik bulunamadı.</p>";
+  let html = guvenlikTemizle(ham);
+  html = html.replace(/<h[1-6](\s[^>]*)?>/gi, "<h2>");
+  html = html.replace(/<\/h[1-6]>/gi, "</h2>");
+  html = html.replace(
+    /<img(?![^>]*style=)([^>]*)(\/?)>/gi,
+    '<img style="max-width:100%;height:auto;display:block;margin:8px 0;"$1$2>'
+  );
+  // Mobil uyumluluk için: taşan tablo/pre gibi blokları saran wrapper
+  html = html.replace(/<table/gi, '<div style="overflow-x:auto;"><table').replace(/<\/table>/gi, "</table></div>");
+  return html;
+}
+
+function ozetCikar(html, uzunluk = 200) {
+  const text = (html || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  return text.slice(0, uzunluk);
+}
+
+// ---------- Blogger OAuth ----------
+let cachedAccessToken = null;
+let cachedAccessTokenExpiry = 0;
+
+async function getAccessToken() {
+  if (cachedAccessToken && Date.now() < cachedAccessTokenExpiry - 60000) {
+    return cachedAccessToken;
+  }
+  const res = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: GOOGLE_CLIENT_ID,
+      client_secret: GOOGLE_CLIENT_SECRET,
+      refresh_token: GOOGLE_REFRESH_TOKEN,
+      grant_type: "refresh_token",
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error("OAuth token alınamadı: " + JSON.stringify(data));
+  }
+  cachedAccessToken = data.access_token;
+  cachedAccessTokenExpiry = Date.now() + data.expires_in * 1000;
+  return cachedAccessToken;
+}
+
+async function bloggerPostAt(baslik, icerikHtml, etiket) {
+  const token = await getAccessToken();
+  const res = await fetch(`https://www.googleapis.com/blogger/v3/blogs/${BLOG_ID}/posts/`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      title: baslik,
+      content: icerikHtml,
+      labels: etiket ? [etiket] : [],
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error("Blogger API hatası: " + JSON.stringify(data));
+  }
+  return data;
+}
+
+// ---------- Ana akış ----------
+async function main() {
+  requireEnv();
+
+  const { data: feeds, error: feedErr } = await supabase
+    .from("feeds")
+    .select("*")
+    .eq("aktif", true);
+
+  if (feedErr) throw new Error("Feed listesi alınamadı: " + feedErr.message);
+  if (!feeds || !feeds.length) {
+    console.log("Aktif RSS kaynağı yok.");
+    return;
+  }
+
+  const now = Date.now();
+  const isleyecekler = feeds.filter((f) => {
+    if (!f.last_checked) return true;
+    const gecenDk = (now - new Date(f.last_checked).getTime()) / 60000;
+    return gecenDk >= f.interval_minutes;
+  });
+
+  console.log(`${feeds.length} aktif kaynaktan ${isleyecekler.length} tanesi bu çalıştırmada işlenecek.`);
+
+  for (const feed of isleyecekler) {
+    await feedIsle(feed);
+  }
+}
+
+async function feedIsle(feed) {
+  try {
+    const rss = await parser.parseURL(feed.url);
+    const items = (rss.items || []).slice(0, 20); // en yeni 20 öğeye bak
+
+    const { data: gonderilmisler } = await supabase
+      .from("sent_posts")
+      .select("guid")
+      .eq("feed_id", feed.id);
+    const gonderilmisSet = new Set((gonderilmisler || []).map((g) => g.guid));
+
+    let atilan = 0;
+    const limit = parseInt(MAX_POSTS_PER_FEED, 10) || 3;
+
+    for (const item of items) {
+      if (atilan >= limit) break;
+      const guid = item.guid || item.id || item.link;
+      if (!guid || gonderilmisSet.has(guid)) continue;
+
+      const hamIcerik = item.contentEncoded || item.content || item.contentSnippet || "";
+      const html = bloggerFormatla(hamIcerik);
+      const ozet = ozetCikar(html);
+      const kategori = kategoriBelirle(item.title, ozet, feed.etiket);
+
+      try {
+        await bloggerPostAt(item.title || "(Başlıksız)", html, kategori);
+        await supabase.from("sent_posts").insert({ feed_id: feed.id, guid });
+        await supabase.from("run_logs").insert({
+          feed_id: feed.id,
+          status: "ok",
+          message: `Yayınlandı: ${item.title}`,
+        });
+        atilan++;
+        console.log(`[OK] ${feed.url} -> ${item.title}`);
+      } catch (postErr) {
+        await supabase.from("run_logs").insert({
+          feed_id: feed.id,
+          status: "hata",
+          message: `Blogger gönderim hatası: ${postErr.message} (${item.title})`,
+        });
+        console.error(`[HATA] ${feed.url} -> ${item.title}:`, postErr.message);
+        // Bir öğe hata verse bile diğer öğelere devam et
+      }
+    }
+
+    await supabase.from("feeds").update({ last_checked: new Date().toISOString() }).eq("id", feed.id);
+  } catch (err) {
+    await supabase.from("run_logs").insert({
+      feed_id: feed.id,
+      status: "hata",
+      message: `Feed okunamadı (${feed.url}): ${err.message}`,
+    });
+    console.error(`[HATA] Feed okunamadı: ${feed.url}`, err.message);
+    // Bu feed'de hata olsa bile diğer feed'lerin işlenmesini engellemez
+  }
+}
+
+main()
+  .then(() => {
+    console.log("Çalıştırma tamamlandı.");
+    process.exit(0);
+  })
+  .catch((err) => {
+    console.error("Genel hata:", err);
+    process.exit(1);
+  });

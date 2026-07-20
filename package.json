@@ -1,0 +1,14 @@
+{
+  "name": "hamdi-oto-rss-bot",
+  "version": "1.0.0",
+  "description": "RSS -> Blogger otomasyonu (Supabase + GitHub Actions, kotasız)",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.4",
+    "rss-parser": "^3.13.0"
+  }
+}
