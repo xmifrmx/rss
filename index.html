@@ -105,10 +105,8 @@
     <label>Şifre</label>
     <input id="login-password" type="password" placeholder="••••••••" />
     <button id="login-btn">Giriş Yap</button>
-    <button id="signup-btn" class="secondary">İlk kurulum: Hesap Oluştur</button>
     <div class="error" id="login-error"></div>
   </div>
-  <p class="hint">İlk kez kullanıyorsanız "Hesap Oluştur" ile e-posta/şifrenizi belirleyin, sonraki girişlerde "Giriş Yap" kullanın.</p>
 </div>
 
 <div id="app" class="wrap hidden">
@@ -206,20 +204,6 @@
       $("app").classList.add("hidden");
     }
   }
-
-  $("signup-btn").addEventListener("click", async () => {
-    $("login-error").textContent = "";
-    const email = $("login-email").value.trim();
-    const password = $("login-password").value;
-    if (!email || password.length < 6) {
-      $("login-error").textContent = "E-posta girin ve en az 6 karakterli bir şifre belirleyin.";
-      return;
-    }
-    const { error } = await sb.auth.signUp({ email, password });
-    if (error) { $("login-error").textContent = error.message; return; }
-    $("login-error").textContent = "Hesap oluşturuldu. E-posta onayı isteniyorsa onaylayıp giriş yapın; istenmiyorsa doğrudan giriş yapabilirsiniz.";
-    await checkSession();
-  });
 
   $("login-btn").addEventListener("click", async () => {
     $("login-error").textContent = "";
