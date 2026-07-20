@@ -250,7 +250,7 @@ async function main() {
 async function feedIsle(feed) {
   try {
     const rss = await parser.parseURL(feed.url);
-    const items = (rss.items || []).slice(0, 20); // en yeni 20 öğeye bak
+    const items = rss.items || []; // feed'in sağladığı TÜM öğelere bak (kaynak zaten kendi geçmişiyle sınırlı)
 
     const { data: gonderilmisler } = await supabase
       .from("sent_posts")
