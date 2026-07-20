@@ -241,13 +241,50 @@ async function main() {
   });
 
   console.log(`${feeds.length} aktif kaynaktan ${isleyecekler.length} tanesi bu çalıştırmada işlenecek.`);
+  if (!isleyecekler.length) return;
 
+  // Her kaynağın gönderilecek-öğe kuyruğunu hazırla (feed'i oku, henüz gönderilmemiş öğeleri belirle)
+  const kuyruklar = [];
   for (const feed of isleyecekler) {
-    await feedIsle(feed);
+    kuyruklar.push(await kuyrukHazirla(feed));
+  }
+
+  // Dönüşümlü (round-robin) gönderim: Blogger'ın kısıtlı kotası TEK bir kaynak
+  // tarafından tüketilmesin diye, her turda sırayla her kaynaktan bir öğe gönderilir.
+  let kotaBitti = false;
+  let ilerlemeVar = true;
+  while (ilerlemeVar && !kotaBitti) {
+    ilerlemeVar = false;
+    for (const k of kuyruklar) {
+      if (kotaBitti) break;
+      if (k.okumaHatasi || k.atilan >= k.limit) continue;
+      const sonraki = sonrakiOgeyiAl(k);
+      if (!sonraki) continue;
+      ilerlemeVar = true;
+
+      const sonuc = await ogeyiGonder(k.feed, sonraki.item, sonraki.guid, k.kaynakTuru);
+      if (sonuc === "ok") {
+        k.atilan++;
+      } else if (sonuc === "rate_limit") {
+        kotaBitti = true;
+        console.warn(
+          "[UYARI] Blogger kotası doldu, bu çalıştırma burada durduruluyor; kalan öğeler bir sonraki çalıştırmada denenecek."
+        );
+      }
+      // 'hata' (rate limit dışı) durumda aynı kaynağın bir sonraki öğesine geçilir
+    }
+  }
+
+  // Başarıyla okunan tüm kaynaklar için last_checked güncelle (okuma hatası alanlar hariç,
+  // böylece bir sonraki çalıştırmada hemen tekrar denenirler)
+  for (const k of kuyruklar) {
+    if (!k.okumaHatasi) {
+      await supabase.from("feeds").update({ last_checked: new Date().toISOString() }).eq("id", k.feed.id);
+    }
   }
 }
 
-async function feedIsle(feed) {
+async function kuyrukHazirla(feed) {
   try {
     const rss = await parser.parseURL(feed.url);
     const items = rss.items || []; // feed'in sağladığı TÜM öğelere bak (kaynak zaten kendi geçmişiyle sınırlı)
@@ -258,49 +295,16 @@ async function feedIsle(feed) {
       .eq("feed_id", feed.id);
     const gonderilmisSet = new Set((gonderilmisler || []).map((g) => g.guid));
 
-    let atilan = 0;
-    const limit = parseInt(feed.items_per_run, 10) || parseInt(MAX_POSTS_PER_FEED, 10) || 3;
-    const kaynakTuru = kaynakTuruTespitEt(feed.source_type, feed.url);
-
-    for (const item of items) {
-      if (atilan >= limit) break;
-      const guid = item.guid || item.id || item.link;
-      if (!guid || gonderilmisSet.has(guid)) continue;
-
-      const hamIcerik = item.contentEncoded || item.content || item.contentSnippet || "";
-      let html = bloggerFormatla(hamIcerik);
-      const embed = videoEmbedOlustur(kaynakTuru, item);
-      if (embed) html = embed + html; // video varsa en üste göm
-      const ozet = ozetCikar(html);
-      const kategori = kategoriBelirle(item.title, ozet, feed.etiket);
-
-      try {
-        await bloggerPostAt(item.title || "(Başlıksız)", html, kategori);
-        await supabase.from("sent_posts").insert({ feed_id: feed.id, guid });
-        await supabase.from("run_logs").insert({
-          feed_id: feed.id,
-          status: "ok",
-          message: `Yayınlandı: ${item.title}`,
-        });
-        atilan++;
-        console.log(`[OK] ${feed.url} -> ${item.title}`);
-        await beklet(BLOGGER_ISTEKLER_ARASI_MS); // Blogger rate limit'ine takılmamak için istekler arası bekleme
-      } catch (postErr) {
-        await supabase.from("run_logs").insert({
-          feed_id: feed.id,
-          status: "hata",
-          message: `Blogger gönderim hatası: ${postErr.message} (${item.title})`,
-        });
-        console.error(`[HATA] ${feed.url} -> ${item.title}:`, postErr.message);
-        if (/"code":429/.test(postErr.message) || /RESOURCE_EXHAUSTED/i.test(postErr.message)) {
-          console.warn(`[UYARI] ${feed.url} rate limit'e takıldı, bu kaynak için çalıştırma durduruldu; diğer kaynaklara geçiliyor.`);
-          break; // bu kaynakta ısrar etmek yerine kalan zamanı diğer kaynaklara ayır
-        }
-        // Diğer hatalarda (rate limit dışı) bir sonraki öğeye devam et
-      }
-    }
-
-    await supabase.from("feeds").update({ last_checked: new Date().toISOString() }).eq("id", feed.id);
+    return {
+      feed,
+      items,
+      gonderilmisSet,
+      cursor: 0,
+      atilan: 0,
+      limit: parseInt(feed.items_per_run, 10) || parseInt(MAX_POSTS_PER_FEED, 10) || 3,
+      kaynakTuru: kaynakTuruTespitEt(feed.source_type, feed.url),
+      okumaHatasi: false,
+    };
   } catch (err) {
     await supabase.from("run_logs").insert({
       feed_id: feed.id,
@@ -308,7 +312,51 @@ async function feedIsle(feed) {
       message: `Feed okunamadı (${feed.url}): ${err.message}`,
     });
     console.error(`[HATA] Feed okunamadı: ${feed.url}`, err.message);
-    // Bu feed'de hata olsa bile diğer feed'lerin işlenmesini engellemez
+    return { feed, items: [], gonderilmisSet: new Set(), cursor: 0, atilan: 0, limit: 0, kaynakTuru: null, okumaHatasi: true };
+  }
+}
+
+function sonrakiOgeyiAl(kuyruk) {
+  while (kuyruk.cursor < kuyruk.items.length) {
+    const item = kuyruk.items[kuyruk.cursor++];
+    const guid = item.guid || item.id || item.link;
+    if (guid && !kuyruk.gonderilmisSet.has(guid)) {
+      return { item, guid };
+    }
+  }
+  return null;
+}
+
+async function ogeyiGonder(feed, item, guid, kaynakTuru) {
+  const hamIcerik = item.contentEncoded || item.content || item.contentSnippet || "";
+  let html = bloggerFormatla(hamIcerik);
+  const embed = videoEmbedOlustur(kaynakTuru, item);
+  if (embed) html = embed + html; // video varsa en üste göm
+  const ozet = ozetCikar(html);
+  const kategori = kategoriBelirle(item.title, ozet, feed.etiket);
+
+  try {
+    await bloggerPostAt(item.title || "(Başlıksız)", html, kategori);
+    await supabase.from("sent_posts").insert({ feed_id: feed.id, guid });
+    await supabase.from("run_logs").insert({
+      feed_id: feed.id,
+      status: "ok",
+      message: `Yayınlandı: ${item.title}`,
+    });
+    console.log(`[OK] ${feed.url} -> ${item.title}`);
+    await beklet(BLOGGER_ISTEKLER_ARASI_MS); // Blogger rate limit'ine takılmamak için istekler arası bekleme
+    return "ok";
+  } catch (postErr) {
+    await supabase.from("run_logs").insert({
+      feed_id: feed.id,
+      status: "hata",
+      message: `Blogger gönderim hatası: ${postErr.message} (${item.title})`,
+    });
+    console.error(`[HATA] ${feed.url} -> ${item.title}:`, postErr.message);
+    if (/"code":429/.test(postErr.message) || /RESOURCE_EXHAUSTED/i.test(postErr.message)) {
+      return "rate_limit";
+    }
+    return "hata";
   }
 }
 
