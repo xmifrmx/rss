@@ -18,7 +18,7 @@ const {
   GOOGLE_CLIENT_ID,
   GOOGLE_CLIENT_SECRET,
   GOOGLE_REFRESH_TOKEN,
-  MAX_POSTS_PER_FEED = "100", // her çalıştırmada, feed başına en fazla kaç yeni yazı atılsın
+  MAX_POSTS_PER_FEED = "3", // her çalıştırmada, feed başına en fazla kaç yeni yazı atılsın
 } = process.env;
 
 function requireEnv() {
@@ -213,6 +213,11 @@ async function bloggerPostAt(baslik, icerikHtml, etiket) {
   return data;
 }
 
+const BLOGGER_ISTEKLER_ARASI_MS = 2000; // Blogger API rate limit'ine takılmamak için her gönderim arası bekleme
+function beklet(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 // ---------- Ana akış ----------
 async function main() {
   requireEnv();
@@ -279,6 +284,7 @@ async function feedIsle(feed) {
         });
         atilan++;
         console.log(`[OK] ${feed.url} -> ${item.title}`);
+        await beklet(BLOGGER_ISTEKLER_ARASI_MS); // Blogger rate limit'ine takılmamak için istekler arası bekleme
       } catch (postErr) {
         await supabase.from("run_logs").insert({
           feed_id: feed.id,
@@ -286,7 +292,11 @@ async function feedIsle(feed) {
           message: `Blogger gönderim hatası: ${postErr.message} (${item.title})`,
         });
         console.error(`[HATA] ${feed.url} -> ${item.title}:`, postErr.message);
-        // Bir öğe hata verse bile diğer öğelere devam et
+        if (/"code":429/.test(postErr.message) || /RESOURCE_EXHAUSTED/i.test(postErr.message)) {
+          console.warn(`[UYARI] ${feed.url} rate limit'e takıldı, bu kaynak için çalıştırma durduruldu; diğer kaynaklara geçiliyor.`);
+          break; // bu kaynakta ısrar etmek yerine kalan zamanı diğer kaynaklara ayır
+        }
+        // Diğer hatalarda (rate limit dışı) bir sonraki öğeye devam et
       }
     }
 
