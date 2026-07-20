@@ -7,7 +7,18 @@ package.json
 index.js
 .gitignore
 .github/workflows/rss-bot.yml
+docs/index.html      <- Yönetim paneliniz (site)
 ```
+
+## 1.1) Yönetim panelini yayına alın (GitHub Pages)
+1. Repo → **Settings → Pages**
+2. "Build and deployment" → Source: **Deploy from a branch**
+3. Branch: `main` (veya kullandığınız branch), klasör: **/docs** → Save
+4. Birkaç dakika sonra `https://KULLANICI_ADINIZ.github.io/REPO_ADINIZ/` adresinde paneliniz yayında olacak
+5. Panelde **e-posta/şifre ile "Hesap Oluştur"**a tıklayıp kendinize giriş bilgisi oluşturun (bu, sadece siz kaynak ekleyebilesiniz diye var — herkes siteyi görse de giriş yapamadan kaynak ekleyemez/silemez)
+
+**Önemli:** Supabase panelinde e-posta onayını kapatmazsanız, kayıt olduktan sonra size gelen onay e-postasını tıklamadan giriş yapamayabilirsiniz. Kolaylık için:
+- Supabase Dashboard → Authentication → Providers → Email → **"Confirm email"** seçeneğini kapatın (bu panel sadece sizin kullanımınız için olduğundan güvenlik açığı yaratmaz)
 
 ## 2) Supabase (zaten hazır)
 Proje oluşturuldu: **hamdi-oto-rss**
@@ -51,11 +62,19 @@ Reponuzda: Settings → Secrets and variables → Actions → "New repository se
 - Loglardan hatasız çalıştığını doğrulayın
 - Sonrasında otomatik olarak 5 dakikada bir tetiklenecek (her feed kendi `interval_minutes` süresine göre işlenecek)
 
-## Feed'leri veya zamanlamayı değiştirmek
-Kod değiştirmenize gerek yok — Supabase panelinden `feeds` tablosunu düzenleyin:
-- Yeni kaynak eklemek: yeni satır ekleyin (`url`, `etiket`, `interval_minutes`, `aktif=true`)
-- Bir kaynağı durdurmak: `aktif = false` yapın
-- Sıklığı değiştirmek: `interval_minutes` değerini değiştirin (5, 10, 20, 30, 60, 120 gibi dakika cinsinden)
+## Kaynakları yönetmek
+Artık kod veya Supabase paneline girmenize gerek yok — kendi sitenizden (adım 1.1) yönetiyorsunuz:
+- **Yeni Kaynak Ekle**: Kaynak Adı, Kaynak Türü (Otomatik Algıla / RSS / Atom / YouTube / Dailymotion / Vimeo), URL, Blogger Etiketi/Kategorisi (elle yazdığınız bu değer her zaman esas alınır), Bir Çalışmada Kaç İçerik, Kontrol Aralığı
+- **Durdur / Etkinleştir**: kaynağı silmeden geçici olarak kapatabilirsiniz
+- **Sil**: kaynağı tamamen kaldırır
+- **Toplam Yayın**: şimdiye kadar Blogger'a atılan toplam yazı sayısını gösterir
+
+### Video kaynakları (YouTube / Dailymotion / Vimeo)
+Bu kaynaklardan gelen videolar, Blogger yazısının içine **duyarlı (mobil uyumlu) bir video oynatıcı** olarak otomatik gömülür — sadece link değil, oynatılabilir video.
+- **YouTube**: `https://www.youtube.com/feeds/videos.xml?channel_id=KANAL_ID` formatını kullanın. Kanal ID'sini kanalın "Hakkında" sayfasından veya sayfa kaynağından alabilirsiniz.
+- **Dailymotion**: `https://www.dailymotion.com/rss/user/KULLANICI_ADI`
+- **Vimeo**: `https://vimeo.com/KULLANICI_ADI/videos/rss`
+- Panelde "Kaynak Türü"nü **Otomatik Algıla** bırakırsanız script, URL'e bakarak türü kendisi anlar.
 
 ## Önemli notlar (dürüst uyarılar)
 - GitHub Actions'ın `schedule` tetikleyicisi **garanti dakikasında** çalışmaz; yoğun saatlerde birkaç dakika gecikebilir. Bu yüzden 5 dakikalık cron kullanıp gerçek sıklığı veritabanından okuyoruz — en güvenilir yöntem budur.

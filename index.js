@@ -45,15 +45,17 @@ const parser = new Parser({
       ["content:encoded", "contentEncoded"],
       ["media:content", "mediaContent"],
       ["media:thumbnail", "mediaThumbnail"],
+      ["yt:videoId", "ytVideoId"],
     ],
   },
   timeout: 20000,
   headers: { "User-Agent": "Mozilla/5.0 (compatible; HamdiOtoRSSBot/1.0)" },
 });
 
-// ---------- Kategori otomatik belirleme ----------
-// Feed'in kendi etiketi varsayılan olarak kullanılır; ama başlık/özet içinde
-// daha spesifik bir kategoriye işaret eden anahtar kelimeler varsa o kategori seçilir.
+// ---------- Kategori belirleme ----------
+// Panelde "Blogger Etiketi / Kategorisi" alanına elle yazdığınız değer HER ZAMAN
+// esas alınır. Sadece bu alan boş bırakılırsa anahtar kelimeye göre otomatik
+// bir kategori tahmin edilir (yedek mekanizma).
 const KATEGORI_ANAHTAR_KELIME = {
   Otomobil: ["otomobil", "araç", "araba", "motor", "elektrikli araç", "suv", "sedan", "lastik", "sürüş"],
   Ekonomi: ["dolar", "euro", "borsa", "enflasyon", "faiz", "ekonomi", "piyasa", "tl ", "kur ", "zam"],
@@ -62,14 +64,72 @@ const KATEGORI_ANAHTAR_KELIME = {
   Haberler: ["haber", "gündem", "açıklama", "bakan", "meclis", "kriz"],
   "Rüya Tabirleri": ["rüya", "rüyada", "tabir"],
   "Tarihte Bugün": ["tarihte bugün", "yılında", "doğdu", "vefat etti"],
+  Video: ["video", "izle", "fragman"],
 };
 
-function kategoriBelirle(baslik, ozet, varsayilanEtiket) {
+function kategoriBelirle(baslik, ozet, manuelEtiket) {
+  if (manuelEtiket && manuelEtiket.trim()) return manuelEtiket.trim();
   const metin = `${baslik || ""} ${ozet || ""}`.toLowerCase();
   for (const [kategori, kelimeler] of Object.entries(KATEGORI_ANAHTAR_KELIME)) {
     if (kelimeler.some((k) => metin.includes(k))) return kategori;
   }
-  return varsayilanEtiket;
+  return "Genel";
+}
+
+// ---------- Kaynak türü tespiti ----------
+function kaynakTuruTespitEt(sourceType, url) {
+  if (sourceType && sourceType !== "auto") return sourceType;
+  const u = (url || "").toLowerCase();
+  if (u.includes("youtube.com") || u.includes("youtu.be")) return "youtube";
+  if (u.includes("dailymotion.com")) return "dailymotion";
+  if (u.includes("vimeo.com")) return "vimeo";
+  return "rss"; // rss-parser Atom feed'lerini de aynı şekilde okuyabilir
+}
+
+// ---------- Video gömme (embed) ----------
+function responsiveEmbedSar(iframeHtml) {
+  return (
+    '<div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;max-width:100%;margin:12px 0;">' +
+    iframeHtml.replace(
+      "<iframe",
+      '<iframe style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;"'
+    ) +
+    "</div>"
+  );
+}
+
+function videoEmbedOlustur(kaynakTuru, item) {
+  const link = item.link || "";
+  try {
+    if (kaynakTuru === "youtube") {
+      let videoId = item.ytVideoId;
+      if (!videoId) {
+        const m = link.match(/(?:v=|youtu\.be\/)([\w-]{6,})/);
+        videoId = m ? m[1] : null;
+      }
+      if (!videoId) return null;
+      return responsiveEmbedSar(
+        `<iframe src="https://www.youtube.com/embed/${videoId}" allowfullscreen loading="lazy"></iframe>`
+      );
+    }
+    if (kaynakTuru === "dailymotion") {
+      const m = link.match(/dailymotion\.com\/video\/([\w]+)/);
+      if (!m) return null;
+      return responsiveEmbedSar(
+        `<iframe src="https://www.dailymotion.com/embed/video/${m[1]}" allowfullscreen loading="lazy"></iframe>`
+      );
+    }
+    if (kaynakTuru === "vimeo") {
+      const m = link.match(/vimeo\.com\/(?:channels\/[\w-]+\/)?(\d+)/);
+      if (!m) return null;
+      return responsiveEmbedSar(
+        `<iframe src="https://player.vimeo.com/video/${m[1]}" allowfullscreen loading="lazy"></iframe>`
+      );
+    }
+  } catch {
+    return null;
+  }
+  return null;
 }
 
 // ---------- Güvenli HTML temizleme ----------
@@ -194,7 +254,8 @@ async function feedIsle(feed) {
     const gonderilmisSet = new Set((gonderilmisler || []).map((g) => g.guid));
 
     let atilan = 0;
-    const limit = parseInt(MAX_POSTS_PER_FEED, 10) || 3;
+    const limit = parseInt(feed.items_per_run, 10) || parseInt(MAX_POSTS_PER_FEED, 10) || 3;
+    const kaynakTuru = kaynakTuruTespitEt(feed.source_type, feed.url);
 
     for (const item of items) {
       if (atilan >= limit) break;
@@ -202,7 +263,9 @@ async function feedIsle(feed) {
       if (!guid || gonderilmisSet.has(guid)) continue;
 
       const hamIcerik = item.contentEncoded || item.content || item.contentSnippet || "";
-      const html = bloggerFormatla(hamIcerik);
+      let html = bloggerFormatla(hamIcerik);
+      const embed = videoEmbedOlustur(kaynakTuru, item);
+      if (embed) html = embed + html; // video varsa en üste göm
       const ozet = ozetCikar(html);
       const kategori = kategoriBelirle(item.title, ozet, feed.etiket);
 

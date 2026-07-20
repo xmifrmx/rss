@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Hamdi Oto RSS · Yönetim Paneli</title>
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg: #061a12;
+    --panel: #0c2419;
+    --panel-border: #1e4632;
+    --accent: #22c55e;
+    --accent-dim: #16532f;
+    --text: #eafff2;
+    --text-dim: #7fae94;
+    --danger: #ef4444;
+    --radius: 16px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:radial-gradient(circle at 50% -10%, #0e2c1d 0%, var(--bg) 55%);
+    color:var(--text);
+    font-family: -apple-system, "Segoe UI", Roboto, Inter, Arial, sans-serif;
+    min-height:100vh;
+    padding:20px 16px 60px;
+  }
+  .wrap{max-width:640px;margin:0 auto;}
+  h1{font-size:1.5rem;margin:6px 0 2px;}
+  .sub{color:var(--text-dim);font-size:.9rem;margin-bottom:20px;}
+  .card{
+    background:var(--panel);
+    border:1px solid var(--panel-border);
+    border-radius:var(--radius);
+    padding:22px;
+    margin-bottom:16px;
+  }
+  .stat-label{color:var(--text-dim);font-size:.95rem;}
+  .stat-value{font-size:2.6rem;font-weight:700;margin-top:4px;}
+  label{display:block;color:var(--text-dim);font-size:.9rem;margin:14px 0 6px;}
+  label:first-of-type{margin-top:0;}
+  input, select, textarea{
+    width:100%;
+    background:#08170f;
+    border:1px solid var(--panel-border);
+    color:var(--text);
+    border-radius:12px;
+    padding:13px 14px;
+    font-size:1rem;
+    outline:none;
+  }
+  input:focus, select:focus, textarea:focus{border-color:var(--accent);}
+  input::placeholder{color:#4a7060;}
+  button{
+    width:100%;
+    background:var(--accent);
+    color:#04150c;
+    border:none;
+    border-radius:12px;
+    padding:14px;
+    font-size:1rem;
+    font-weight:700;
+    margin-top:18px;
+    cursor:pointer;
+  }
+  button.secondary{background:transparent;border:1px solid var(--panel-border);color:var(--text);font-weight:500;}
+  button.small{width:auto;padding:8px 14px;font-size:.85rem;margin:0;}
+  button.danger{background:var(--danger);color:white;}
+  button:disabled{opacity:.5;cursor:not-allowed;}
+  .row{display:flex;gap:10px;}
+  .row > *{flex:1;}
+  h2{font-size:1.15rem;margin:0 0 4px;}
+  .feed-item{
+    border:1px solid var(--panel-border);
+    border-radius:12px;
+    padding:14px;
+    margin-top:10px;
+  }
+  .feed-item .top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;}
+  .feed-name{font-weight:700;}
+  .feed-meta{color:var(--text-dim);font-size:.82rem;margin-top:3px;word-break:break-all;}
+  .badge{
+    display:inline-block;background:var(--accent-dim);color:#b7f7cf;
+    border-radius:999px;padding:2px 10px;font-size:.72rem;margin-top:6px;margin-right:6px;
+  }
+  .badge.off{background:#4a1d1d;color:#f7b7b7;}
+  .actions{display:flex;gap:8px;margin-top:10px;}
+  #login-screen{max-width:380px;margin:60px auto 0;}
+  .error{color:#ff8a8a;font-size:.85rem;margin-top:8px;min-height:1em;}
+  .hint{color:var(--text-dim);font-size:.78rem;margin-top:6px;}
+  .hidden{display:none !important;}
+  .logout{color:var(--text-dim);font-size:.85rem;text-decoration:underline;cursor:pointer;}
+  .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
+</style>
+</head>
+<body>
+
+<div id="login-screen" class="wrap">
+  <h1>Hamdi Oto RSS</h1>
+  <p class="sub">Yönetim paneline giriş yapın</p>
+  <div class="card">
+    <label>E-posta</label>
+    <input id="login-email" type="email" placeholder="ornek@eposta.com" />
+    <label>Şifre</label>
+    <input id="login-password" type="password" placeholder="••••••••" />
+    <button id="login-btn">Giriş Yap</button>
+    <button id="signup-btn" class="secondary">İlk kurulum: Hesap Oluştur</button>
+    <div class="error" id="login-error"></div>
+  </div>
+  <p class="hint">İlk kez kullanıyorsanız "Hesap Oluştur" ile e-posta/şifrenizi belirleyin, sonraki girişlerde "Giriş Yap" kullanın.</p>
+</div>
+
+<div id="app" class="wrap hidden">
+  <div class="topbar">
+    <div>
+      <h1>Hamdi Oto RSS</h1>
+      <p class="sub">Yönetim Paneli</p>
+    </div>
+    <span class="logout" id="logout-btn">Çıkış yap</span>
+  </div>
+
+  <div class="card">
+    <div class="stat-label">Toplam Yayın</div>
+    <div class="stat-value" id="stat-total">–</div>
+  </div>
+
+  <div class="card">
+    <h2>Kaynaklar (<span id="feed-count">0</span>)</h2>
+    <div id="feed-list"></div>
+  </div>
+
+  <div class="card">
+    <h2>Yeni Kaynak Ekle</h2>
+
+    <label>Kaynak Adı</label>
+    <input id="f-name" placeholder="Ömür Dediğin" />
+
+    <label>Kaynak Türü</label>
+    <select id="f-type">
+      <option value="auto">Otomatik Algıla</option>
+      <option value="rss">RSS</option>
+      <option value="atom">Atom</option>
+      <option value="youtube">YouTube</option>
+      <option value="dailymotion">Dailymotion</option>
+      <option value="vimeo">Vimeo</option>
+    </select>
+
+    <label>RSS / Atom / Video Kanal URL</label>
+    <input id="f-url" placeholder="https://..." />
+    <div class="hint" id="url-hint"></div>
+
+    <label>Blogger Etiketi / Kategorisi</label>
+    <input id="f-etiket" placeholder="Ömür Dediğin" />
+
+    <label>Bir Çalışmada Kaç İçerik?</label>
+    <input id="f-items" type="number" min="1" max="20" value="5" />
+
+    <label>Kontrol Aralığı</label>
+    <select id="f-interval">
+      <option value="5">5 dakika</option>
+      <option value="10">10 dakika</option>
+      <option value="20">20 dakika</option>
+      <option value="30">30 dakika</option>
+      <option value="60" selected>1 saat</option>
+      <option value="120">2 saat</option>
+    </select>
+
+    <button id="save-btn">Kaynağı Kaydet</button>
+    <div class="error" id="save-error"></div>
+  </div>
+</div>
+
+<script>
+  // Bu dosyayı kendi Supabase proje bilgilerinizle değiştirmeyin gerekmiyor —
+  // aşağıdaki anon anahtar herkese açık paylaşılabilir bir anahtardır (RLS korur).
+  const SUPABASE_URL = "https://bifeqxwsatpgfqdvufvn.supabase.co";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJpZmVxeHdzYXRwZ2ZxZHZ1ZnZuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ1MTU1NzgsImV4cCI6MjEwMDA5MTU3OH0.HP93LELZPr9G123JTyDf1_BCO4Wj5Ym8w7IGFGhsPZA";
+
+  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  const $ = (id) => document.getElementById(id);
+
+  const urlHints = {
+    auto: "Herhangi bir RSS, Atom, YouTube, Dailymotion veya Vimeo bağlantısı yapıştırın; tür otomatik anlaşılır.",
+    rss: "Sitenin RSS bağlantısını yapıştırın (genelde /feed veya /rss ile biter).",
+    atom: "Sitenin Atom bağlantısını yapıştırın.",
+    youtube: "Kanal RSS biçimi: https://www.youtube.com/feeds/videos.xml?channel_id=KANAL_ID (Kanal ID'sini kanalın 'Hakkında' sayfasından alın).",
+    dailymotion: "Örnek: https://www.dailymotion.com/rss/user/KULLANICI_ADI",
+    vimeo: "Örnek: https://vimeo.com/KULLANICI_ADI/videos/rss",
+  };
+  $("f-type").addEventListener("change", (e) => {
+    $("url-hint").textContent = urlHints[e.target.value] || "";
+  });
+  $("url-hint").textContent = urlHints.auto;
+
+  // ---------- Oturum ----------
+  async function checkSession() {
+    const { data: { session } } = await sb.auth.getSession();
+    if (session) {
+      $("login-screen").classList.add("hidden");
+      $("app").classList.remove("hidden");
+      await loadAll();
+    } else {
+      $("login-screen").classList.remove("hidden");
+      $("app").classList.add("hidden");
+    }
+  }
+
+  $("signup-btn").addEventListener("click", async () => {
+    $("login-error").textContent = "";
+    const email = $("login-email").value.trim();
+    const password = $("login-password").value;
+    if (!email || password.length < 6) {
+      $("login-error").textContent = "E-posta girin ve en az 6 karakterli bir şifre belirleyin.";
+      return;
+    }
+    const { error } = await sb.auth.signUp({ email, password });
+    if (error) { $("login-error").textContent = error.message; return; }
+    $("login-error").textContent = "Hesap oluşturuldu. E-posta onayı isteniyorsa onaylayıp giriş yapın; istenmiyorsa doğrudan giriş yapabilirsiniz.";
+    await checkSession();
+  });
+
+  $("login-btn").addEventListener("click", async () => {
+    $("login-error").textContent = "";
+    const email = $("login-email").value.trim();
+    const password = $("login-password").value;
+    const { error } = await sb.auth.signInWithPassword({ email, password });
+    if (error) { $("login-error").textContent = error.message; return; }
+    await checkSession();
+  });
+
+  $("logout-btn").addEventListener("click", async () => {
+    await sb.auth.signOut();
+    await checkSession();
+  });
+
+  // ---------- Veri yükleme ----------
+  async function loadAll() {
+    const { count } = await sb.from("sent_posts").select("*", { count: "exact", head: true });
+    $("stat-total").textContent = count ?? 0;
+
+    const { data: feeds, error } = await sb.from("feeds").select("*").order("created_at", { ascending: false });
+    if (error) { $("feed-list").textContent = "Kaynaklar yüklenemedi: " + error.message; return; }
+
+    $("feed-count").textContent = feeds.length;
+    $("feed-list").innerHTML = "";
+    if (!feeds.length) {
+      $("feed-list").innerHTML = '<p class="hint">Henüz kaynak eklenmedi.</p>';
+      return;
+    }
+    for (const f of feeds) {
+      const el = document.createElement("div");
+      el.className = "feed-item";
+      el.innerHTML = `
+        <div class="top">
+          <div>
+            <div class="feed-name">${escapeHtml(f.name || f.etiket || "(isimsiz)")}</div>
+            <div class="feed-meta">${escapeHtml(f.url)}</div>
+            <span class="badge ${f.aktif ? "" : "off"}">${f.aktif ? "Aktif" : "Durduruldu"}</span>
+            <span class="badge">${escapeHtml(f.source_type)}</span>
+            <span class="badge">${escapeHtml(f.etiket || "Genel")}</span>
+            <span class="badge">${f.interval_minutes} dk</span>
+            <span class="badge">${f.items_per_run} içerik/çalışma</span>
+          </div>
+        </div>
+        <div class="actions">
+          <button class="small secondary" data-action="toggle" data-id="${f.id}" data-val="${!f.aktif}">${f.aktif ? "Durdur" : "Etkinleştir"}</button>
+          <button class="small danger" data-action="delete" data-id="${f.id}">Sil</button>
+        </div>
+      `;
+      $("feed-list").appendChild(el);
+    }
+
+    $("feed-list").querySelectorAll("button[data-action]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const id = btn.dataset.id;
+        if (btn.dataset.action === "toggle") {
+          await sb.from("feeds").update({ aktif: btn.dataset.val === "true" }).eq("id", id);
+        } else if (btn.dataset.action === "delete") {
+          if (!confirm("Bu kaynağı silmek istediğinize emin misiniz?")) return;
+          await sb.from("feeds").delete().eq("id", id);
+        }
+        await loadAll();
+      });
+    });
+  }
+
+  function escapeHtml(s) {
+    return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  // ---------- Yeni kaynak kaydet ----------
+  $("save-btn").addEventListener("click", async () => {
+    $("save-error").textContent = "";
+    const name = $("f-name").value.trim();
+    const source_type = $("f-type").value;
+    const url = $("f-url").value.trim();
+    const etiket = $("f-etiket").value.trim();
+    const items_per_run = parseInt($("f-items").value, 10) || 5;
+    const interval_minutes = parseInt($("f-interval").value, 10);
+
+    if (!url) { $("save-error").textContent = "RSS/Atom/Video URL zorunludur."; return; }
+    if (!etiket) { $("save-error").textContent = "Blogger etiketi/kategorisi zorunludur."; return; }
+
+    const { error } = await sb.from("feeds").insert({
+      name: name || etiket,
+      source_type,
+      url,
+      etiket,
+      items_per_run,
+      interval_minutes,
+      aktif: true,
+    });
+    if (error) { $("save-error").textContent = "Kaydedilemedi: " + error.message; return; }
+
+    $("f-name").value = "";
+    $("f-url").value = "";
+    $("f-etiket").value = "";
+    $("f-items").value = 5;
+    await loadAll();
+  });
+
+  checkSession();
+</script>
+</body>
+</html>
