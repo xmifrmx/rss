@@ -5,7 +5,7 @@ on:
     # GitHub Actions cron'un en küçük birimi 5 dakikadır.
     # Her feed'in gerçek sıklığı (5/10/20/30/60/120 dk) Supabase'deki
     # interval_minutes alanına göre script içinde belirlenir.
-    - cron: "*/30 * * * *"
+    - cron: "*/15 * * * *"
   workflow_dispatch: {} # Actions sekmesinden manuel "Run workflow" ile de tetiklenebilir
 
 concurrency:
