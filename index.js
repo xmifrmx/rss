@@ -328,7 +328,14 @@ function sonrakiOgeyiAl(kuyruk) {
 }
 
 async function ogeyiGonder(feed, item, guid, kaynakTuru) {
-  const hamIcerik = item.contentEncoded || item.content || item.contentSnippet || "";
+  const hamIcerik = 
+    item.contentEncoded || 
+    item.content || 
+    item.contentSnippet || 
+    item.summary || 
+    item.description || 
+    "";
+  
   let html = bloggerFormatla(hamIcerik);
   const embed = videoEmbedOlustur(kaynakTuru, item);
   if (embed) html = embed + html; // video varsa en üste göm
