@@ -18,7 +18,7 @@ const {
   GOOGLE_CLIENT_ID,
   GOOGLE_CLIENT_SECRET,
   GOOGLE_REFRESH_TOKEN,
-  MAX_POSTS_PER_FEED = "3", // her çalıştırmada, feed başına en fazla kaç yeni yazı atılsın
+  MAX_POSTS_PER_FEED = "100", // her çalıştırmada, feed başına en fazla kaç yeni yazı atılsın
 } = process.env;
 
 function requireEnv() {
