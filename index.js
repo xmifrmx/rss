@@ -213,7 +213,7 @@ async function bloggerPostAt(baslik, icerikHtml, etiket) {
   return data;
 }
 
-const BLOGGER_ISTEKLER_ARASI_MS = 2000; // Blogger API rate limit'ine takılmamak için her gönderim arası bekleme
+const BLOGGER_ISTEKLER_ARASI_MS = 15000; // Blogger API rate limit'ine takılmamak için her gönderim arası bekleme
 function beklet(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
