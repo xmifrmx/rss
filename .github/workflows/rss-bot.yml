@@ -2,7 +2,12 @@ name: RSS to Blogger Bot
 
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    # Günde 1 kez çalışır (UTC 03:00 = TR saatiyle 06:00). GitHub'da cron UTC'dir.
+    # Not: Önceden 15 dakikada birdi (günde 96 kez); bu da tek başına
+    # ayda ~2880 dk'lık minimum faturalandırma anlamına geliyordu ve
+    # ücretsiz plandaki 2000 dk/ay Actions sınırını tek başına aşıyordu.
+    # Günlük çalıştırma, kullanımı ayda ~30 dk minimuma indirir.
+    - cron: "0 3 * * *"
   workflow_dispatch: {}
 
 concurrency:
