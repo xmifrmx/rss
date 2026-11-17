@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src https://script.google.com https://*.googleusercontent.com; base-uri 'none'; form-action 'none'">
+<title>Hamdi Oto RSS · Yönetim</title>
+<style>
+:root{--bg:#07150e;--p:#0d2218;--p2:#12301f;--bd:#245238;--ac:#4ade80;--ac2:#1d6b3c;--tx:#ecfdf3;--dim:#86b79b;--red:#f87171;--r:14px;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.5 -apple-system,"Segoe UI",Roboto,Arial,sans-serif;min-height:100vh}
+.wrap{max-width:760px;margin:0 auto;padding:18px 16px 80px}
+h1{font-size:1.45rem;margin:0}h2{font-size:1.1rem;margin:0 0 12px}
+.sub{color:var(--dim);font-size:.9rem;margin:2px 0 0}
+.card{background:var(--p);border:1px solid var(--bd);border-radius:var(--r);padding:18px;margin-bottom:14px}
+label{display:block;color:var(--dim);font-size:.88rem;margin:14px 0 6px}
+label:first-child{margin-top:0}
+input,select{width:100%;background:#08180f;border:1px solid var(--bd);color:var(--tx);border-radius:10px;padding:12px;font:inherit}
+input[type=checkbox]{width:auto;margin-right:8px}
+input:focus-visible,select:focus-visible,button:focus-visible,.tab:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+button{background:var(--ac);color:#04150c;border:0;border-radius:10px;padding:12px 16px;font:inherit;font-weight:700;cursor:pointer}
+button.sec{background:transparent;color:var(--tx);border:1px solid var(--bd);font-weight:500}
+button.del{background:#7f1d1d;color:#fff}
+button.sm{padding:7px 12px;font-size:.85rem}
+button:disabled{opacity:.5;cursor:wait}
+.full{width:100%;margin-top:16px}
+.row{display:flex;gap:10px;flex-wrap:wrap}.row>*{flex:1 1 140px}
+.tabs{display:flex;gap:6px;overflow-x:auto;margin:16px 0;border-bottom:1px solid var(--bd)}
+.tab{background:none;color:var(--dim);border-radius:10px 10px 0 0;padding:10px 14px;font-weight:600;white-space:nowrap}
+.tab[aria-selected=true]{color:var(--tx);box-shadow:inset 0 -3px var(--ac)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:14px}
+.stat{background:var(--p);border:1px solid var(--bd);border-radius:var(--r);padding:14px}
+.stat b{display:block;font-size:1.9rem;line-height:1.2}.stat span{color:var(--dim);font-size:.85rem}
+.feed{border:1px solid var(--bd);border-radius:12px;padding:12px;margin-top:10px;background:var(--p2)}
+.feed .n{font-weight:700}.feed .u{color:var(--dim);font-size:.8rem;word-break:break-all}
+.b{display:inline-block;background:var(--ac2);color:#d3f9e1;border-radius:99px;padding:1px 10px;font-size:.74rem;margin:6px 6px 0 0}
+.b.off,.b.err{background:#5b2323;color:#fecaca}
+.acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.msg{min-height:1.3em;margin-top:10px;font-size:.9rem;color:var(--dim)}.msg.e{color:var(--red)}.msg.k{color:var(--ac)}
+.log{padding:8px 0;border-bottom:1px solid var(--bd);font-size:.85rem}.log small{color:var(--dim)}
+.log.hata .t{color:var(--red)}
+.hide{display:none!important}
+#login{max-width:400px;margin:8vh auto 0}
+.hint{color:var(--dim);font-size:.8rem;margin-top:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<section id="login" class="hide">
+  <h1>Hamdi Oto RSS</h1><p class="sub">Yönetim paneline giriş</p>
+  <div class="card" style="margin-top:16px">
+    <div id="apiBox"><label for="api">Apps Script Web uygulaması adresi</label>
+      <input id="api" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off">
+      <div class="hint">Yalnızca ilk kurulumda gerekir; bu tarayıcıda saklanır.</div></div>
+    <label for="em">E-posta</label><input id="em" type="email" autocomplete="username">
+    <label for="pw">Şifre</label><input id="pw" type="password" autocomplete="current-password">
+    <button class="full" id="loginBtn">Giriş yap</button>
+    <div class="msg e" id="loginMsg" role="alert"></div>
+  </div>
+</section>
+
+<main id="app" class="hide">
+  <div class="row" style="align-items:center;justify-content:space-between">
+    <div><h1>Hamdi Oto RSS</h1><p class="sub">RSS’ten Blogger’a otomatik yayın</p></div>
+    <button class="sec sm" id="logout" style="flex:0 0 auto">Çıkış yap</button>
+  </div>
+  <div class="tabs" role="tablist" id="tabs">
+    <button class="tab" role="tab" data-t="home">Panel</button>
+    <button class="tab" role="tab" data-t="feeds">Kaynaklar</button>
+    <button class="tab" role="tab" data-t="form" id="formTab">Kaynak ekle</button>
+    <button class="tab" role="tab" data-t="logs">Günlük</button>
+    <button class="tab" role="tab" data-t="set">Ayarlar</button>
+  </div>
+
+  <section data-p="home">
+    <div class="stats" id="stats"></div>
+    <div class="card"><h2>İşlemler</h2>
+      <div class="row"><button id="runNow">Şimdi çalıştır</button><button class="sec" id="blogTest">Blogger bağlantısını sına</button><button class="sec" id="refresh">Yenile</button></div>
+      <div class="msg" id="homeMsg" role="status"></div></div>
+  </section>
+
+  <section data-p="feeds" class="hide"><div class="card"><h2>Kaynaklar (<span id="fc">0</span>)</h2><div id="feedList"></div><div class="msg" id="feedMsg" role="status"></div></div></section>
+
+  <section data-p="form" class="hide"><div class="card"><h2 id="formTitle">Yeni kaynak ekle</h2>
+    <label for="fName">Kaynak adı</label><input id="fName" placeholder="Ömür Dediğin">
+    <label for="fType">Kaynak türü</label>
+    <select id="fType"><option value="auto">Otomatik algıla</option><option value="rss">RSS</option><option value="atom">Atom</option><option value="youtube">YouTube</option><option value="dailymotion">Dailymotion</option><option value="vimeo">Vimeo</option></select>
+    <label for="fUrl">Besleme adresi</label><input id="fUrl" placeholder="https://…" inputmode="url">
+    <div class="hint">YouTube: https://www.youtube.com/feeds/videos.xml?channel_id=KANAL_ID</div>
+    <label for="fTag">Blogger etiketi (birden fazlaysa virgülle ayırın)</label><input id="fTag" placeholder="Otomobil">
+    <div class="row"><div><label for="fItems">Çalışma başına yazı</label><input id="fItems" type="number" min="1" max="20" value="3"></div>
+    <div><label for="fInt">Kontrol aralığı</label><select id="fInt"><option value="5">5 dk</option><option value="15">15 dk</option><option value="30">30 dk</option><option value="60" selected>1 saat</option><option value="120">2 saat</option><option value="240">4 saat</option><option value="360">6 saat</option><option value="720">12 saat</option><option value="1440">1 gün</option></select></div></div>
+    <div class="row"><button class="full" id="fSave">Kaynağı kaydet</button><button class="full sec" id="fTest">Adresi sına</button><button class="full sec hide" id="fCancel">Vazgeç</button></div>
+    <div class="msg" id="formMsg" role="status"></div></div></section>
+
+  <section data-p="logs" class="hide"><div class="card"><h2>Son 100 kayıt</h2><div id="logList"></div></div></section>
+
+  <section data-p="set" class="hide"><div class="card"><h2>Ayarlar</h2>
+    <label for="sBlog">Blogger Blog ID</label><input id="sBlog" inputmode="numeric" placeholder="Blogger panelindeki adres çubuğunda blogID=…">
+    <label for="sTrig">Botun çalışma sıklığı</label>
+    <select id="sTrig"><option value="5">5 dakikada bir</option><option value="10">10 dakikada bir</option><option value="15">15 dakikada bir</option><option value="30">30 dakikada bir</option><option value="60">1 saatte bir</option><option value="120">2 saatte bir</option><option value="240">4 saatte bir</option><option value="360">6 saatte bir</option><option value="480">8 saatte bir</option><option value="720">12 saatte bir</option></select>
+    <div class="row"><div><label for="sWait">Yazılar arası bekleme (sn)</label><input id="sWait" type="number" min="2" max="30"></div>
+    <div><label for="sAge">En fazla kaç günlük içerik (0 = sınırsız)</label><input id="sAge" type="number" min="0" max="365"></div></div>
+    <label style="display:flex;align-items:center;margin-top:16px"><input id="sSrc" type="checkbox">Yazının sonuna kaynak bağlantısı ekle</label>
+    <button class="full" id="sSave">Ayarları kaydet</button><div class="msg" id="setMsg" role="status"></div></div></section>
+</main>
+</div>
+
+<script>
+const DEFAULT_API = ""; // isterseniz Web uygulaması adresini buraya yazın; boşsa girişte sorulur
+const $ = (i) => document.getElementById(i);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const store = { get: (k) => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} }, del: (k) => { try { localStorage.removeItem(k); } catch (e) {} } };
+let API = DEFAULT_API || store.get("api"), TOKEN = store.get("tok"), FEEDS = [], editId = "";
+
+async function call(action, data = {}, auth = true) {
+  let res;
+  try { res = await fetch(API, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action, token: auth ? TOKEN : undefined, ...data }) }); }
+  catch (e) { throw new Error("Sunucuya ulaşılamadı. Web uygulaması adresini ve erişim ayarını (Herkes) kontrol edin."); }
+  let j; try { j = await res.json(); } catch (e) { throw new Error("Sunucu beklenmeyen yanıt verdi. Dağıtımın güncel olduğundan emin olun."); }
+  if (j.auth === false) { showLogin(); throw new Error(j.error); }
+  if (!j.ok) throw new Error(j.error || "Bilinmeyen hata");
+  return j.data;
+}
+function say(id, text, kind) { const e = $(id); e.textContent = text || ""; e.className = "msg" + (kind ? " " + kind : ""); }
+async function busy(btn, msgId, fn) {
+  btn.disabled = true; say(msgId, "İşleniyor…");
+  try { await fn(); } catch (e) { say(msgId, e.message, "e"); } finally { btn.disabled = false; }
+}
+const when = (t) => t ? new Date(t).toLocaleString("tr-TR") : "—";
+
+function showLogin() { $("app").classList.add("hide"); $("login").classList.remove("hide"); $("apiBox").classList.toggle("hide", !!DEFAULT_API); $("api").value = API; TOKEN = ""; store.del("tok"); }
+function showApp() { $("login").classList.add("hide"); $("app").classList.remove("hide"); tab("home"); loadAll(); }
+function tab(t) {
+  document.querySelectorAll("[data-p]").forEach((s) => s.classList.toggle("hide", s.dataset.p !== t));
+  document.querySelectorAll(".tab").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.t === t)));
+  if (t === "logs") loadLogs();
+}
+$("tabs").addEventListener("click", (e) => { const b = e.target.closest(".tab"); if (b) tab(b.dataset.t); });
+
+$("loginBtn").onclick = () => busy($("loginBtn"), "loginMsg", async () => {
+  const a = $("api").value.trim() || API;
+  if (!/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(a)) throw new Error("Geçerli bir Apps Script Web uygulaması adresi girin (…/exec ile biter).");
+  API = a;
+  const d = await call("login", { email: $("em").value.trim(), password: $("pw").value }, false);
+  TOKEN = d.token; store.set("api", API); store.set("tok", TOKEN); $("pw").value = ""; say("loginMsg", ""); showApp();
+});
+$("pw").addEventListener("keydown", (e) => { if (e.key === "Enter") $("loginBtn").click(); });
+$("logout").onclick = () => showLogin();
+
+async function loadAll() { await Promise.all([loadStatus(), loadFeeds(), loadSettings()]).catch((e) => say("homeMsg", e.message, "e")); }
+async function loadStatus() {
+  const s = await call("status");
+  const q = s.quotaUntil > Date.now() ? "Blogger kotası doldu · " + when(s.quotaUntil) + " sonrası" : s.running ? "Çalışıyor" : s.trigger ? "Zamanlandı" : "Zamanlayıcı kapalı";
+  $("stats").innerHTML = [["Toplam yayın", s.total], ["Kaynak", s.feeds + " (" + s.active + " aktif)"], ["Durum", q], ["Son çalışma", when(s.lastRun)]]
+    .map(([l, v]) => `<div class="stat"><b style="${String(v).length > 12 ? "font-size:1.05rem" : ""}">${esc(v)}</b><span>${esc(l)}</span></div>`).join("");
+}
+async function loadFeeds() {
+  FEEDS = await call("feeds"); $("fc").textContent = FEEDS.length;
+  $("feedList").innerHTML = FEEDS.length ? FEEDS.map((f) => `<div class="feed"><div class="n">${esc(f.name)}</div><div class="u">${esc(f.url)}</div>
+    <span class="b ${f.aktif ? "" : "off"}">${f.aktif ? "Aktif" : "Durduruldu"}</span><span class="b">${esc(f.type)}</span><span class="b">${esc(f.etiket)}</span><span class="b">${f.intervalMinutes} dk</span><span class="b">${f.itemsPerRun} yazı/çalışma</span><span class="b">${f.toplam} yayın</span>
+    ${f.lastStatus && f.lastStatus !== "ok" ? `<span class="b err">${esc(f.lastStatus)}</span>` : ""}
+    <div class="acts"><button class="sec sm" data-a="toggle" data-id="${esc(f.id)}">${f.aktif ? "Durdur" : "Etkinleştir"}</button><button class="sec sm" data-a="edit" data-id="${esc(f.id)}">Düzenle</button><button class="del sm" data-a="del" data-id="${esc(f.id)}">Sil</button></div></div>`).join("")
+    : '<p class="hint">Henüz kaynak yok. “Kaynak ekle” sekmesinden ilkini ekleyin.</p>';
+}
+$("feedList").addEventListener("click", async (e) => {
+  const b = e.target.closest("button[data-a]"); if (!b) return;
+  const f = FEEDS.find((x) => x.id === b.dataset.id); if (!f) return;
+  try {
+    if (b.dataset.a === "toggle") await call("feedToggle", { id: f.id, aktif: !f.aktif });
+    else if (b.dataset.a === "del") { if (!confirm(`“${f.name}” kaynağı silinsin mi?`)) return; await call("feedDelete", { id: f.id }); }
+    else { editId = f.id; $("fName").value = f.name; $("fType").value = f.type; $("fUrl").value = f.url; $("fTag").value = f.etiket; $("fItems").value = f.itemsPerRun; $("fInt").value = String(f.intervalMinutes); $("formTitle").textContent = "Kaynağı düzenle"; $("fCancel").classList.remove("hide"); say("formMsg", ""); tab("form"); return; }
+    await loadFeeds(); loadStatus();
+  } catch (err) { say("feedMsg", err.message, "e"); }
+});
+function resetForm() { editId = ""; ["fName", "fUrl", "fTag"].forEach((i) => ($(i).value = "")); $("fItems").value = 3; $("fType").value = "auto"; $("fInt").value = "60"; $("formTitle").textContent = "Yeni kaynak ekle"; $("fCancel").classList.add("hide"); }
+$("fCancel").onclick = () => { resetForm(); tab("feeds"); };
+$("fSave").onclick = () => busy($("fSave"), "formMsg", async () => {
+  await call("feedSave", { id: editId, name: $("fName").value, type: $("fType").value, url: $("fUrl").value, etiket: $("fTag").value, itemsPerRun: $("fItems").value, intervalMinutes: $("fInt").value });
+  resetForm(); say("formMsg", "Kaydedildi.", "k"); await loadFeeds(); loadStatus(); tab("feeds");
+});
+$("fTest").onclick = () => busy($("fTest"), "formMsg", async () => {
+  const r = await call("feedTest", { url: $("fUrl").value });
+  say("formMsg", r.count + " içerik bulundu: " + r.titles.join(" | "), "k");
+});
+async function loadLogs() {
+  try { const l = await call("logs"); $("logList").innerHTML = l.length ? l.map((x) => `<div class="log ${esc(x.status)}"><small>${esc(when(x.ts))} · ${esc(x.feed || "genel")}</small><div class="t">${esc(x.message)}</div></div>`).join("") : '<p class="hint">Henüz kayıt yok.</p>'; }
+  catch (e) { $("logList").textContent = e.message; }
+}
+async function loadSettings() {
+  const s = (await call("status")).settings;
+  $("sBlog").value = s.blogId; $("sTrig").value = String(s.tetikleyiciDk); $("sWait").value = s.postBeklemeSn; $("sAge").value = s.maxYasGun; $("sSrc").checked = !!s.kaynakEkle;
+}
+$("sSave").onclick = () => busy($("sSave"), "setMsg", async () => {
+  await call("settingsSave", { blogId: $("sBlog").value, tetikleyiciDk: $("sTrig").value, postBeklemeSn: $("sWait").value, maxYasGun: $("sAge").value, kaynakEkle: $("sSrc").checked });
+  say("setMsg", "Ayarlar kaydedildi, zamanlayıcı güncellendi.", "k"); loadStatus();
+});
+$("refresh").onclick = () => busy($("refresh"), "homeMsg", async () => { await loadAll(); say("homeMsg", ""); });
+$("runNow").onclick = () => busy($("runNow"), "homeMsg", async () => { await call("runNow"); say("homeMsg", "Bot birkaç saniye içinde arka planda başlayacak. Sonucu Günlük sekmesinde izleyin.", "k"); });
+$("blogTest").onclick = () => busy($("blogTest"), "homeMsg", async () => { const r = await call("blogTest"); say("homeMsg", `Bağlantı tamam: ${r.name} (${r.posts ?? "?"} yazı)`, "k"); });
+
+(async () => { if (API && TOKEN) { try { await call("status"); showApp(); return; } catch (e) {} } showLogin(); })();
+</script>
+</body>
+</html>
