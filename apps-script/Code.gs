@@ -7,10 +7,6 @@
  *  3) Dağıt > Web uygulaması: "Şu kullanıcı olarak çalıştır: Ben", "Erişim: Herkes"
  *  4) Web uygulaması URL'sini panele (GitHub Pages) gir
  */
-const ADMIN_EMAIL = 'hamdiuludag@gmail.com';
-const SALT = 'hu-rss-2026-salt';
-const ROUNDS = 1000;
-const PASS_HASH = '43e5296f18883d6c79ddd2ae1b626506b7efaa71b9e95b0282f623179da8b504'; // şifrenin tuzlu özeti; şifrenin kendisi kodda yoktur
 const FEED_COLS = ['id', 'name', 'type', 'url', 'etiket', 'itemsPerRun', 'intervalMinutes', 'aktif', 'lastChecked', 'lastStatus', 'toplam', 'createdAt'];
 const SHEETS = { Feeds: FEED_COLS, Sent: ['feedId', 'key', 'ts'], Logs: ['ts', 'feedId', 'feedName', 'status', 'message'] };
 const DEFAULTS = { blogId: '', tetikleyiciDk: 15, postBeklemeSn: 8, maxYasGun: 7, kaynakEkle: true };
@@ -18,18 +14,26 @@ const RUN_BUDGET_MS = 300000; // Apps Script 6 dk sınırının altında kal
 const HDR = { 'User-Agent': 'Mozilla/5.0 (compatible; HamdiOtoRSSBot/2.0)', Accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml, */*' };
 
 // ---------- Kimlik doğrulama ----------
-function hashPass_(pw) {
-  const sb = Utilities.newBlob(SALT).getBytes();
-  let h = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, Utilities.newBlob(SALT + pw).getBytes());
-  for (let i = 1; i < ROUNDS; i++) h = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, h.concat(sb));
-  return h.map(function (b) { return ('0' + (b & 255).toString(16)).slice(-2); }).join('');
+// E-posta ve şifre KODDA YOKTUR: Proje ayarları > Komut dosyası özellikleri'nde
+// ADMIN_EMAIL ve ADMIN_PASSWORD adıyla tutulur (yalnızca proje sahibi görebilir).
+function sha_(s) {
+  return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, Utilities.newBlob(String(s)).getBytes())
+    .map(function (b) { return ('0' + (b & 255).toString(16)).slice(-2); }).join('');
+}
+function safeEq_(a, b) { // sabit süreli karşılaştırma
+  const x = sha_(a), y = sha_(b);
+  let d = 0;
+  for (let i = 0; i < x.length; i++) d |= x.charCodeAt(i) ^ y.charCodeAt(i);
+  return d === 0;
 }
 function login_(r) {
-  const c = CacheService.getScriptCache();
+  const c = CacheService.getScriptCache(), P = PropertiesService.getScriptProperties();
+  const mail = (P.getProperty('ADMIN_EMAIL') || '').trim().toLowerCase(), pass = P.getProperty('ADMIN_PASSWORD') || '';
+  if (!mail || !pass) return { ok: false, error: 'Yönetici bilgileri tanımlı değil. Apps Script > Proje ayarları > Komut dosyası özellikleri bölümüne ADMIN_EMAIL ve ADMIN_PASSWORD ekleyin.' };
   const fails = Number(c.get('fails') || 0);
   if (fails >= 5) return { ok: false, error: 'Çok fazla hatalı deneme. 15 dakika sonra tekrar deneyin.' };
-  const okMail = String(r.email || '').trim().toLowerCase() === ADMIN_EMAIL;
-  const okPass = hashPass_(String(r.password || '').trim()) === PASS_HASH;
+  const okMail = safeEq_(String(r.email || '').trim().toLowerCase(), mail);
+  const okPass = safeEq_(String(r.password || '').trim(), pass.trim());
   if (!(okMail && okPass)) { c.put('fails', String(fails + 1), 900); return { ok: false, error: 'E-posta veya şifre hatalı.' }; }
   c.remove('fails');
   const t = Utilities.getUuid() + Utilities.getUuid();
@@ -180,7 +184,7 @@ const API_ = {
 };
 function blogErr_(code, j) {
   const m = (j && j.error && j.error.message) || ('HTTP ' + code);
-  if (/has not been used|is disabled|accessNotConfigured/i.test(m)) return m + ' → Apps Script projesini standart bir Cloud projesine bağlayıp Blogger API v3\'ü etkinleştirin (README, Adım 4).';
+  if (/has not been used|is disabled|accessNotConfigured/i.test(m)) return m + ' → Apps Script projesini standart bir Cloud projesine bağlayıp Blogger API v3\'ü etkinleştirin (README, Adım 5).';
   return m;
 }
 
