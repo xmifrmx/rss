@@ -9,7 +9,8 @@
  */
 const FEED_COLS = ['id', 'name', 'type', 'url', 'etiket', 'itemsPerRun', 'intervalMinutes', 'aktif', 'lastChecked', 'lastStatus', 'toplam', 'createdAt'];
 const SHEETS = { Feeds: FEED_COLS, Sent: ['feedId', 'key', 'ts'], Logs: ['ts', 'feedId', 'feedName', 'status', 'message'] };
-const DEFAULTS = { blogId: '', tetikleyiciDk: 15, postBeklemeSn: 8, maxYasGun: 7, kaynakEkle: true };
+const BLOG_URL = 'https://mifrm.blogspot.com';
+const DEFAULTS = { blogId: '2141149813172676021', tetikleyiciDk: 15, postBeklemeSn: 8, maxYasGun: 7, kaynakEkle: true };
 const RUN_BUDGET_MS = 300000; // Apps Script 6 dk sınırının altında kal
 const HDR = { 'User-Agent': 'Mozilla/5.0 (compatible; HamdiOtoRSSBot/2.0)', Accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml, */*' };
 
@@ -105,7 +106,9 @@ function updateFields_(id, o) {
 function settings_() {
   let o = {};
   try { o = JSON.parse(PropertiesService.getScriptProperties().getProperty('SETTINGS') || '{}'); } catch (e) { o = {}; }
-  return Object.assign({}, DEFAULTS, o);
+  const r = Object.assign({}, DEFAULTS, o);
+  if (!r.blogId) r.blogId = DEFAULTS.blogId;
+  return r;
 }
 function log_(f, status, msg) {
   try { db_().getSheetByName('Logs').appendRow([Date.now(), f ? f.id : '', f ? f.name : '', status, String(msg).slice(0, 500)]); } catch (e) { console.error(e); }
@@ -179,6 +182,8 @@ const API_ = {
     const r = UrlFetchApp.fetch('https://www.googleapis.com/blogger/v3/blogs/' + encodeURIComponent(id), { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true });
     const j = JSON.parse(r.getContentText() || '{}');
     if (r.getResponseCode() !== 200) throw new Error(blogErr_(r.getResponseCode(), j));
+    const host = function (u) { return String(u || '').replace(/^https?:\/\//i, '').replace(/\/+$/, '').toLowerCase(); };
+    if (host(j.url) !== host(BLOG_URL)) throw new Error('Bu Blog ID başka bir bloga ait: ' + j.url + ' (beklenen: ' + BLOG_URL + ')');
     return { name: j.name, url: j.url, posts: j.posts && j.posts.totalItems };
   }
 };
