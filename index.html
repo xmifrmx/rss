@@ -100,7 +100,7 @@ button:disabled{opacity:.5;cursor:wait}
     <label for="sBlog">Blogger Blog ID</label><input id="sBlog" inputmode="numeric" placeholder="Blogger panelindeki adres çubuğunda blogID=…">
     <label for="sTrig">Botun çalışma sıklığı</label>
     <select id="sTrig"><option value="5">5 dakikada bir</option><option value="10">10 dakikada bir</option><option value="15">15 dakikada bir</option><option value="30">30 dakikada bir</option><option value="60">1 saatte bir</option><option value="120">2 saatte bir</option><option value="240">4 saatte bir</option><option value="360">6 saatte bir</option><option value="480">8 saatte bir</option><option value="720">12 saatte bir</option></select>
-    <div class="row"><div><label for="sWait">Yazılar arası bekleme (sn)</label><input id="sWait" type="number" min="2" max="30"></div>
+    <div class="row"><div><label for="sWait">Yazılar arası bekleme (2–30 sn)</label><input id="sWait" type="number" min="2" max="30"></div>
     <div><label for="sAge">En fazla kaç günlük içerik (0 = sınırsız)</label><input id="sAge" type="number" min="0" max="365"></div></div>
     <label style="display:flex;align-items:center;margin-top:16px"><input id="sSrc" type="checkbox">Yazının sonuna kaynak bağlantısı ekle</label>
     <button class="full" id="sSave">Ayarları kaydet</button><div class="msg" id="setMsg" role="status"></div></div></section>
@@ -193,8 +193,9 @@ async function loadSettings() {
   $("sBlog").value = s.blogId; $("sTrig").value = String(s.tetikleyiciDk); $("sWait").value = s.postBeklemeSn; $("sAge").value = s.maxYasGun; $("sSrc").checked = !!s.kaynakEkle;
 }
 $("sSave").onclick = () => busy($("sSave"), "setMsg", async () => {
-  await call("settingsSave", { blogId: $("sBlog").value, tetikleyiciDk: $("sTrig").value, postBeklemeSn: $("sWait").value, maxYasGun: $("sAge").value, kaynakEkle: $("sSrc").checked });
-  say("setMsg", "Ayarlar kaydedildi, zamanlayıcı güncellendi.", "k"); loadStatus();
+  const s = await call("settingsSave", { blogId: $("sBlog").value, tetikleyiciDk: $("sTrig").value, postBeklemeSn: $("sWait").value, maxYasGun: $("sAge").value, kaynakEkle: $("sSrc").checked });
+  await loadSettings(); // kutuları sunucunun gerçekten kaydettiği değerlerle yenile
+  say("setMsg", "Ayarlar kaydedildi, zamanlayıcı güncellendi. Bekleme: " + s.postBeklemeSn + " sn (izin verilen 2–30).", "k"); loadStatus();
 });
 $("refresh").onclick = () => busy($("refresh"), "homeMsg", async () => { await loadAll(); say("homeMsg", ""); });
 $("runNow").onclick = () => busy($("runNow"), "homeMsg", async () => { await call("runNow"); say("homeMsg", "Bot birkaç saniye içinde arka planda başlayacak. Sonucu Günlük sekmesinde izleyin.", "k"); });
