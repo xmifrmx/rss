@@ -108,7 +108,7 @@ button:disabled{opacity:.5;cursor:wait}
 </div>
 
 <script>
-const DEFAULT_API = ""; // isterseniz Web uygulaması adresini buraya yazın; boşsa girişte sorulur
+const DEFAULT_API = "https://script.google.com/macros/s/AKfycbx1DRuC_o2qsbNa-HBCsVgd91eCcKMRZEBNyQJgVkcGefdm0cOg3ziFN1df3XzkZ3WKaA/exec"; // Web uygulaması adresi; doluysa girişte sorulmaz
 const $ = (i) => document.getElementById(i);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const store = { get: (k) => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} }, del: (k) => { try { localStorage.removeItem(k); } catch (e) {} } };
